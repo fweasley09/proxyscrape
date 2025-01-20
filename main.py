@@ -10,55 +10,70 @@
 
 import requests
 from bs4 import BeautifulSoup
+import schedule
 import time
+import re
 
-# Function to scrape proxies from a public proxy website
-def scrape_proxies(url):
-    try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
-
-        # Extract proxy data (IP, port, and type)
-        proxies = []
-        for row in soup.find_all('tr'):
-            columns = row.find_all('td')
-            if len(columns) >= 3:  # Ensure there are enough columns
-                ip = columns[0].text.strip()
-                port = columns[1].text.strip()
-                proxy_type = columns[4].text.strip().lower()  # Assuming proxy type is in the 5th column
-                proxies.append(f"{proxy_type}://{ip}:{port}")
-
-        return proxies
-    except Exception as e:
-        print(f"Error scraping {url}: {e}")
-        return []
-
-# List of public proxy websites (add more as needed)
-proxy_sites = [
-    "https://free-proxy-list.net/",
-    "https://www.us-proxy.org/",
-    "https://www.sslproxies.org/",
-    "https://free-proxy-list.net/anonymous-proxy.html",
+# Proxy websites
+PROXY_SITES = [
+    # ... (list remains the same)
 ]
 
-# File to save scraped proxies
-output_file = "scraped_proxies.txt"
+# Proxy storage
+PROXIES = []
 
-# Main script
+def scrape_proxies():
+    global PROXIES
+    PROXIES = []
+    
+    for site in PROXY_SITES:
+        try:
+            response = requests.get(site, timeout=10)
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # Extract proxies from each site
+            proxies = soup.find_all('tr')
+            for proxy in proxies:
+                ip = proxy.find('td').text
+                port = proxy.find('td', class_='port').text
+                
+                # Detect proxy protocol
+                protocol = None
+                if "socks4" in ip.lower():
+                    protocol = "socks4"
+                    ip = ip.replace("socks4://", "").replace("socks4@", "")
+                elif "socks5" in ip.lower():
+                    protocol = "socks5"
+                    ip = ip.replace("socks5://", "").replace("socks5@", "")
+                elif "http" in ip.lower():
+                    protocol = "http"
+                else:
+                    protocol = "http"  # Default protocol
+                
+                # Format proxy string
+                if protocol == "http":
+                    proxy_str = f"http://{ip}:{port}"
+                elif protocol in ["socks4", "socks5"]:
+                    proxy_str = f"{protocol}://{ip}:{port}"
+                
+                PROXIES.append(proxy_str)
+                
+        except Exception as e:
+            print(f"Error scraping {site}: {e}")
+            
+    print(f"Scraped {len(PROXIES)} proxies")
+    
+    # Save proxies to file
+    with open('proxies.txt', 'w') as f:
+        for proxy in PROXIES:
+            f.write(proxy + "\n")
+
+def main():
+    schedule.every(1).minutes.do(scrape_proxies)  # Run every 1 minute
+    
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
+
 if __name__ == "__main__":
-    all_proxies = []
-
-    for site in proxy_sites:
-        print(f"Scraping proxies from: {site}")
-        proxies = scrape_proxies(site)
-        all_proxies.extend(proxies)
-        time.sleep(2)  # Pause between requests to avoid being blocked
-
-    # Remove duplicates and save to file
-    all_proxies = list(set(all_proxies))
-    with open(output_file, "w") as file:
-        file.write("\n".join(all_proxies))
-
-    print(f"Scraped {len(all_proxies)} unique proxies.")
-    print(f"Proxies saved to {output_file}.")
+    main()
