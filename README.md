@@ -10,4 +10,4 @@ Here is a Python script using requests and BeautifulSoup to scrape free proxies 
 
 # Dependencies:
 ```bash
-pip install requests beautifulsoup4
+pip install -r requirements.txt
